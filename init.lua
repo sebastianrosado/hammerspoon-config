@@ -1,198 +1,75 @@
-local secrets = require('secrets')
-      secrets.start('.secrets.json')
-
 hs.loadSpoon('Hyper')
-hs.loadSpoon('Headspace')
-hs.loadSpoon('Teamz'):start()
-hs.loadSpoon('ElgatoKey'):start()
-hs.loadSpoon('MoveWindows')
 hs.loadSpoon('Split')
-hs.loadSpoon('AutoLayout')
-
-IsDocked = function()
-  return hs.fnutils.some(hs.usb.attachedDevices(), function(device)
-    return device.productName == "CalDigit Thunderbolt 3 Audio"
-  end)
-end
+hs.loadSpoon('ElgatoKey'):start()
 
 Config = {}
 Config.applications = require('configApplications')
 
--- configure spaces for headspace
-Config.spaces = {}
-Config.funcs = {}
-Config.projects = hs.settings.get("secrets").toggl.projects
-
-require('spaces/review')
-require('spaces/schedule')
-require('spaces/deep')
-require('spaces/shallow')
-require('spaces/hemingway')
-require('spaces/design')
-require('spaces/research')
-require('spaces/communicate')
-require('spaces/focused_meeting')
-require('spaces/collaboration')
-require('spaces/leadership')
-require('spaces/play')
-require('spaces/weekly_review')
-require('spaces/start')
-require('spaces/shutdown')
-
 Hyper = spoon.Hyper
 
-Hyper:bindHotKeys({hyperKey = {{}, 'F19'}})
+Hyper:bindHotKeys({
+    hyperKey = {{}, 'F19'}
+})
 
 hs.fnutils.each(Config.applications, function(appConfig)
-  if appConfig.hyperKey then
-    Hyper:bind({}, appConfig.hyperKey, function() hs.application.launchOrFocusByBundleID(appConfig.bundleID) end)
-  end
-  if appConfig.localBindings then
-    hs.fnutils.each(appConfig.localBindings, function(key)
-      Hyper:bindPassThrough(key, appConfig.bundleID)
-    end)
-  end
-end)
-
--- provide the ability to override config per computer
-if (hs.fs.displayName('./localConfig.lua')) then
-  require('localConfig')
-end
-
-MoveWindows = spoon.MoveWindows
-hs.window.highlight.ui.overlay = true
-MoveWindows
-  :start()
-  :bind('', ',', function()
-    hs.window.focusedWindow()
-      :application()
-      :selectMenuItem("Tile Window to Left of Screen")
-    MoveWindows:exit()
-  end)
-  :bind('', '.', function()
-    hs.window.focusedWindow()
-      :application()
-      :selectMenuItem("Tile Window to Right of Screen")
-    MoveWindows:exit()
-  end)
-  :bind('', 'v', function()
-    spoon.Split.split()
-    MoveWindows:exit()
-  end)
-  :bind('', 'tab', function ()
-    hs.window.focusedWindow():centerOnScreen()
-    MoveWindows:exit()
-  end)
-  :bind('', 'd', function()
-    -- demo mode!
-    if MoveWindows.demo then
-      hs.execute("defaults write com.apple.finder CreateDesktop -bool true; killall Finder")
-      hs.shortcuts.run("DND Off")
-      spoon.ElgatoKey.off()
-      MoveWindows.demo = false
-    else
-      hs.shortcuts.run("DND On")
-      spoon.ElgatoKey.on()
-      local demo = hs.window.focusedWindow()
-      hs.execute("defaults write com.apple.finder CreateDesktop -bool false; killAll Finder")
-      hs.fnutils.map(demo:otherWindowsSameScreen(), function(win)
-        win:minimize()
-      end)
-      demo:centerOnScreen()
-      MoveWindows.demo = true
+    if appConfig.hyperKey then
+        Hyper:bind({}, appConfig.hyperKey, function()
+            hs.application.launchOrFocusByBundleID(appConfig.bundleID)
+        end)
     end
-    MoveWindows:exit()
-  end)
-
-Hyper:bind({}, 'm', function() MoveWindows:toggle() end)
-
-local autolayout = spoon.AutoLayout
-
-local layouts = {}
--- build a table of layouts for AutoLayout from Config
-hs.fnutils.map(Config.applications, function(app_config)
-  local bundleID = app_config['bundleID']
-  if app_config.layouts then
-    hs.fnutils.map(app_config.layouts, function(rule)
-      local title_pattern, screen, layout = rule[1], rule[2], rule[3]
-      table.insert(layouts,
-        {
-          hs.application.get(bundleID),                  -- application name
-          title_pattern,                                 -- window title
-          function() autolayout.whichScreen(screen) end, -- screen
-          layout,                                        -- layout
-          nil,
-          nil
-        }
-      )
-    end)
-  end
+    if appConfig.localBindings then
+        hs.fnutils.each(appConfig.localBindings, function(key)
+            Hyper:bindPassThrough(key, appConfig.bundleID)
+        end)
+    end
 end)
-
-autolayout
-:setDefault(layouts)
-:start()
-
-Hyper:bind({}, 'return', nil, autolayout.autoLayout)
 
 local brave = require('brave')
-      brave.start(Config)
-
-spoon.Headspace:start()
-               :loadConfig(Config)
-               :setTogglKey(hs.settings.get('secrets').toggl.key)
-
-Hyper:bind({}, 'l', nil, spoon.Headspace.choose)
+brave.start(Config)
 
 -- Random bindings
 Hyper:bind({}, 'r', nil, function()
-  hs.application.launchOrFocusByBundleID('org.hammerspoon.Hammerspoon')
+    hs.application.launchOrFocusByBundleID('org.hammerspoon.Hammerspoon')
 end)
-Hyper:bind({'shift'}, 'r', nil, function() hs.reload() end)
+Hyper:bind({'shift'}, 'r', nil, function()
+    hs.reload()
+end)
 
 local hyperGroup = function(key, tag)
-  Hyper:bind({}, key, nil, function()
-    hs.application.launchOrFocusByBundleID(hs.settings.get("group." .. tag))
-  end)
-  Hyper:bind({'option'}, key, nil, function()
-    local group =
-      hs.fnutils.filter(Config.applications, function(app)
-        return app.tags and
-               hs.fnutils.contains(app.tags, tag) and
-               app.bundleID ~= hs.settings.get("group." .. tag)
-      end)
-
-    local choices = {}
-    hs.fnutils.each(group, function(app)
-      table.insert(choices, {
-        text = hs.application.nameForBundleID(app.bundleID),
-        image = hs.image.imageFromAppBundle(app.bundleID),
-        bundleID = app.bundleID
-      })
+    Hyper:bind({}, key, nil, function()
+        hs.application.launchOrFocusByBundleID(hs.settings.get("group." .. tag))
     end)
+    Hyper:bind({'option'}, key, nil, function()
+        local group = hs.fnutils.filter(Config.applications, function(app)
+            return app.tags and hs.fnutils.contains(app.tags, tag) and app.bundleID ~= hs.settings.get("group." .. tag)
+        end)
 
-    if #choices == 1 then
-      local app = choices[1]
+        local choices = {}
+        hs.fnutils.each(group, function(app)
+            table.insert(choices, {
+                text = hs.application.nameForBundleID(app.bundleID),
+                image = hs.image.imageFromAppBundle(app.bundleID),
+                bundleID = app.bundleID
+            })
+        end)
 
-      hs.notify.new(nil)
-      :title("Switching hyper+" .. key .. " to " .. hs.application.nameForBundleID(app.bundleID))
-      :contentImage(hs.image.imageFromAppBundle(app.bundleID))
-      :send()
+        if #choices == 1 then
+            local app = choices[1]
 
-      hs.settings.set("group." .. tag, app.bundleID)
-      hs.application.launchOrFocusByBundleID(app.bundleID)
-    else
-      hs.chooser.new(function(app)
-        if app then
-          hs.settings.set("group." .. tag, app.bundleID)
-          hs.application.launchOrFocusByBundleID(app.bundleID)
+            hs.notify.new(nil):title("Switching hyper+" .. key .. " to " .. hs.application.nameForBundleID(app.bundleID))
+                :contentImage(hs.image.imageFromAppBundle(app.bundleID)):send()
+
+            hs.settings.set("group." .. tag, app.bundleID)
+            hs.application.launchOrFocusByBundleID(app.bundleID)
+        else
+            hs.chooser.new(function(app)
+                if app then
+                    hs.settings.set("group." .. tag, app.bundleID)
+                    hs.application.launchOrFocusByBundleID(app.bundleID)
+                end
+            end):placeholderText("Choose an application for hyper+" .. key .. ":"):choices(choices):show()
         end
-      end)
-      :placeholderText("Choose an application for hyper+" .. key .. ":")
-      :choices(choices)
-      :show()
-    end
-  end)
+    end)
 end
 
 hyperGroup('q', 'personal')
@@ -202,92 +79,100 @@ hyperGroup('i', 'chat')
 -- Jump to google hangout or zoom
 Z_count = 0
 Hyper:bind({}, 'z', nil, function()
-  Z_count = Z_count + 1
+    Z_count = Z_count + 1
 
-  hs.timer.doAfter(0.5, function()
-    Z_count = 0
-  end)
+    hs.timer.doAfter(0.5, function()
+        Z_count = 0
+    end)
 
-  if Z_count == 2 then
-    spoon.ElgatoKey:toggle()
-  else
-    -- start a timer
-    -- if not pressed again then
-    if hs.application.find('us.zoom.xos') then
-      hs.application.launchOrFocusByBundleID('us.zoom.xos')
-    elseif hs.application.find('com.microsoft.teams') then
-      local call = spoon.Teamz.callWindow()
-      if call then
-        call:focus()
-      end
+    if Z_count == 2 then
+        spoon.ElgatoKey:toggle()
     else
-      brave.jump("meet.google.com|hangouts.google.com.call")
+        -- start a timer
+        -- if not pressed again then
+        if hs.application.find('us.zoom.xos') then
+            hs.application.launchOrFocusByBundleID('us.zoom.xos')
+        elseif hs.application.find('com.microsoft.teams') then
+            local call = spoon.Teamz.callWindow()
+            if call then
+                call:focus()
+            end
+        else
+            brave.jump("meet.google.com|hangouts.google.com.call")
+        end
     end
-  end
 end)
 
--- Jump to figma
-Hyper:bind({}, 'v', nil, function()
-  if hs.application.find('com.figma.Desktop') then
-    hs.application.launchOrFocusByBundleID('com.figma.Desktop')
-  elseif hs.application.find('com.electron.realtimeboard') then
-    hs.application.launchOrFocusByBundleID('com.electron.realtimeboard')
-  elseif hs.application.find('com.adobe.LightroomClassicCC7') then
-    hs.application.launchOrFocusByBundleID('com.adobe.LightroomClassicCC7')
-  else
-    brave.jump("lucidchart.com|figma.com")
-  end
+-- Run or raise
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "N", function()
+    hs.application.launchOrFocusByBundleID('com.brave.Browser')
 end)
 
-Hyper:bind({}, 'p', nil, function()
-  local _success, projects, _output = hs.osascript.javascript([[
-    (function() {
-      var Things = Application("Things");
-      var divider = /## Resources/;
-
-      Things.launch();
-
-      let getUrls = function(proj) {
-        if (proj.notes() && proj.notes().match(divider)) {
-          return proj.notes()
-                     .split(divider)[1]
-                     .replace(divider, "")
-                     .split("\n")
-                     .map(str => str.replace(/^- /, ""))
-                     .filter(s => s != "")
-        }
-        else {
-          return false;
-        }
-      }
-
-      let projects =
-        Things
-        .projects()
-        .filter(t => t.status() == "open")
-        .map(function(proj) {
-          return {
-            text: proj.name(),
-            subText: proj.area().name(),
-            urls: getUrls(proj),
-            id: proj.id()
-          }
-        })
-        .filter(function(proj) {
-          return proj.urls
-        });
-
-      return projects;
-    })();
-  ]])
-
-  hs.chooser.new(function(choice)
-    hs.fnutils.each(choice.urls, hs.urlevent.openURL)
-    hs.urlevent.openURL("things:///show?id=" .. choice.id)
-  end)
-  :placeholderText("Choose a project…")
-  :choices(projects)
-  :show()
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "T", function()
+    hs.application.launchOrFocusByBundleID('com.microsoft.VSCode')
 end)
 
-require('browserSnip')
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "I", function()
+    hs.application.launchOrFocusByBundleID('com.googlecode.iterm2')
+end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "S", function()
+    hs.application.launchOrFocusByBundleID('com.tinyspeck.slackmacgap')
+end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "D", function()
+    hs.application.launchOrFocusByBundleID('com.hnc.Discord')
+end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "M", function()
+    hs.application.launchOrFocusByBundleID('com.apple.mail')
+end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "F", function()
+    hs.application.launchOrFocusByBundleID('com.apple.finder')
+end)
+
+-- hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "P", function()
+--     hs.application.launchOrFocusByBundleID('com.postmanlabs.mac')
+-- end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "X", function()
+    hs.application.launchOrFocusByBundleID('com.spotify.client')
+end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "Z", function()
+    hs.application.launchOrFocusByBundleID('us.zoom.xos')
+end)
+
+-- hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "B", function()
+--     hs.application.launchOrFocusByBundleID('com.obsproject.obs-studio')
+-- end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "L", function()
+    hs.application.launchOrFocusByBundleID('com.electron.logseq')
+end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "W", function()
+    hs.application.launchOrFocusByBundleID('net.whatsapp.WhatsApp')
+end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "G", function()
+    hs.application.launchOrFocusByBundleID('com.jetbrains.datagrip')
+end)
+
+hs.hotkey.bind({"shift", "cmd", "alt", "ctrl"}, "U", function()
+    hs.application.launchOrFocusByBundleID('notion.id')
+end)
+
+-- local hyper = {"ctrl", "alt", "cmd"}
+
+-- hs.loadSpoon("MiroWindowsManager")
+
+-- hs.window.animationDuration = 0.3
+-- spoon.MiroWindowsManager:bindHotkeys({
+--     right = {hyper, "up"},
+--     down = {hyper, "down"},
+--     left = {hyper, "down"},
+--     fullscreen = {hyper, "f"},
+--     nextscreen = {hyper, "n"}
+-- })
